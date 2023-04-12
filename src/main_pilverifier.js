@@ -4,26 +4,41 @@ const fs = require("fs");
 const version = require("../package").version;
 const tty = require('tty');
 
-const { importPolynomials } = require("./binfiles.js");
-
 const { compile, verifyPil, newConstantPolsArray, newCommitPolsArray } = require("../index");
 
 const { F1Field } = require("ffjavascript");
+const { getRoots } = require("./utils");
 
 const argv = require("yargs")
     .version(version)
-    .usage("main_pilverifier.js <commit.bin> -p <input.pil> [-j <input_pil.json>] -c <constant.bin> [-u <publics.json>]")
+    .usage("main_pilverifier.js <commit.bin> -p <input.pil> [-j <input_pil.json>] -c <constant.bin> [-u <publics.json>] [--field]")
     .alias("p", "pil")
     .alias("j", "pil-json")
     .alias("c", "constant")
     .alias("P", "config")
     .alias("v", "verbose")
     .alias("u", "publics")
+    .string("field")
     .argv;
 
 async function run() {
 
-    const F = new F1Field("0xFFFFFFFF00000001");
+    let F;
+    if(argv.field) {
+        if(argv.field === "gl") {
+            F = new F1Field("0xFFFFFFFF00000001");
+            F.w = getRoots(F);
+        } else if (argv.field === "bn128") {
+            F = new F1Field(21888242871839275222246405745257275088548364400416034343698204186575808495617n);
+        } else if (argv.field === "bls12381") {
+            F = new F1Field("0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
+        } else {
+            throw new Error(`Invalid field: ${argv.field}. Field must be gl, bn128 or bls12381`);
+        }
+    } else {
+        F = new F1Field("0xFFFFFFFF00000001");
+        F.w = getRoots(F);
+    }
 
     let commitFile;
     if (argv._.length == 0) {
@@ -61,8 +76,8 @@ async function run() {
 
     const n = pil.references[Object.keys(pil.references)[0]].polDeg;
 
-    const constPols =  newConstantPolsArray(pil);
-    const cmPols =  newCommitPolsArray(pil);
+    const constPols =  newConstantPolsArray(pil, F);
+    const cmPols =  newCommitPolsArray(pil, F);
 
     await constPols.loadFromFile(constantFile);
     await cmPols.loadFromFile(commitFile);
@@ -86,8 +101,3 @@ run().then(()=> {
     console.log(err.stack);
     process.exit(1);
 });
-
-exports.log2 = function log2( V )
-{
-    return( ( ( V & 0xFFFF0000 ) !== 0 ? ( V &= 0xFFFF0000, 16 ) : 0 ) | ( ( V & 0xFF00FF00 ) !== 0 ? ( V &= 0xFF00FF00, 8 ) : 0 ) | ( ( V & 0xF0F0F0F0 ) !== 0 ? ( V &= 0xF0F0F0F0, 4 ) : 0 ) | ( ( V & 0xCCCCCCCC ) !== 0 ? ( V &= 0xCCCCCCCC, 2 ) : 0 ) | ( ( V & 0xAAAAAAAA ) !== 0 ) );
-}
